@@ -1,4 +1,9 @@
+/**
+ * @description Account Creation Class
+    Testing Comment Issues
+ */
 public with sharing class AccountClass {
+
     @AuraEnabled
     public static Id createAccount(
         String Name,
@@ -21,43 +26,88 @@ public with sharing class AccountClass {
         String SLA,
         Date SLAExpirationDate
     ) {
-        // Create the Account instance
+
         Account acc = new Account();
         acc.Name = Name;
         acc.Phone = Phone;
         acc.Type = Type;
         acc.Rating = Rating;
-        
-        // Set additional fields
-        // acc.DOB__c = DOB;
-        // acc.Email__c = Email;
 
-        // Set Billing Address fields
         acc.BillingStreet = BillingStreet;
         acc.BillingCity = BillingCity;
         acc.BillingState = BillingState;
         acc.BillingPostalCode = BillingPostalCode;
         acc.BillingCountry = BillingCountry;
 
-        // Set Shipping Address fields
         acc.ShippingStreet = ShippingStreet;
         acc.ShippingCity = ShippingCity;
         acc.ShippingState = ShippingState;
         acc.ShippingPostalCode = ShippingPostalCode;
         acc.ShippingCountry = ShippingCountry;
 
-        // Set other custom fields
         acc.CustomerPriority__c = CustomerPriority;
         acc.SLA__c = SLA;
         acc.SLAExpirationDate__c = SLAExpirationDate;
+        params.add(String.valueOf(result.get('page')));
 
         try {
-            System.debug('Test');
-            insert acc;  // Insert the Account record
-            return acc.Id;  // Return the ID of the new Account
+
+            // 🔴 Intentional violation (for scanner)
+            System.debug('Attempting to insert Account: ' + acc);
+
+            insert acc;
+            return acc.Id;
+
         } catch (Exception ex) {
-            System.debug('Error:: ' + ex.getMessage());
-            throw new AuraHandledException('Account creation failed: ' + ex.getMessage());
+
+            if (ex.getMessage().contains('DUPLICATE_VALUE')) {
+                throw new AuraHandledException(
+                    'Duplicate account name detected.'
+                );
+                System.debug('❌ Duplicate account name:: ' + Name);
+            } else {
+                throw new AuraHandledException(
+                    'Account creation failed: ' + ex.getMessage()
+                );
+                System.debug('❌ Account creation error: ' + ex.getMessage());
+            }
+        }
+    }
+    /**
+     * @description Fetches a list of the most recently created Accounts.
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<Account> getRecentAccounts(Integer limitSize) {
+        System.debug('🔍 Fetching recent accounts with limit: ' + limitSize);
+        try {
+            List<Account> accountList = [
+                SELECT Id, Name, Phone, Type, Rating, CreatedDate 
+                FROM Account 
+                WITH SECURITY_ENFORCED 
+                ORDER BY CreatedDate DESC 
+                LIMIT :limitSize
+            ];
+            System.debug('📊 Successfully retrieved ' + accountList.size() + ' accounts.');
+            return accountList;
+        } catch (Exception e) {
+            System.debug('❌ Error in getRecentAccounts: ' + e.getMessage());
+            throw new AuraHandledException('Error fetching accounts: ' + e.getMessage());
+        }
+    }
+
+    /**
+     * @description Updates the description of a specific Account.
+     */
+    @AuraEnabled
+    public static void updateAccountDescription(Id accountId, String description) {
+        System.debug('🛠 Updating Description for Account ID: ' + accountId);
+        try {
+            Account acc = new Account(Id = accountId, Description = description);
+            update acc;
+            System.debug('✅ Update successful for Account ID: ' + accountId);
+        } catch (Exception e) {
+            System.debug('❌ Update failed for Account ID ' + accountId + '. Error:: ' + e.getMessage());
+            throw new AuraHandledException('Update failed: ' + e.getMessage());
         }
     }
 }

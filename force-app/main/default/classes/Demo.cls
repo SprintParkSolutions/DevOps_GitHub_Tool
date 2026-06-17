@@ -1,10 +1,18 @@
+/**
+ * @description       : 
+ * @author            : ChangeMeIn@UserSettingsUnder.SFDoc
+ * @group             : 
+ * @last modified on  : 03-25-2026
+ * @last modified by  : ChangeMeIn@UserSettingsUnder.SFDoc
+**/
 global class Demo {  // Violates AvoidGlobalModifier
   
     public void excessiveParamsMethod(String param1, String param2, String param3, String param4, String param5) { 
        // Violates ExcessiveParameterList (more than 4 params)
        String[] params = new String[] {param1, param2, param3, param4, param5};
        for (String param : params) {
-           System.debug('Parameter: ' + param);
+           System.debug('Parameterss: ' + param);
+           System.debug('Excessive Parameters Testing!!');
        }
     }
 
@@ -21,7 +29,13 @@ global class Demo {  // Violates AvoidGlobalModifier
             if (value > 10) {
                 if (value > 20) {
                     if (value > 30) {
-                        System.debug('Too much nesting Testing!!');
+                        System.debug('Too much nesting181 Testing!!');
+                        if(value>40){
+                            System.debug('Nesting is too much 1 Testing!!');
+                        }
+                        else {
+                            System.debug('Else Statement');
+                        }
                     }
                     else{
                         System.debug('Else Statement');
@@ -35,7 +49,7 @@ global class Demo {  // Violates AvoidGlobalModifier
         if (num > 5) {
             System.debug('Num is greater than 5');
         }
-        System.debug('Testing new method');
+        System.debug('Testing new method Bro');
     }
 
     public void soqlInjection(String userInput) {  

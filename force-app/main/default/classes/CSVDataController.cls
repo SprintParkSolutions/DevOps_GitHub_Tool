@@ -1,4 +1,5 @@
 public with sharing class CSVDataController {
+
     public class CSVDataResponse {
         @AuraEnabled public List<Map<String, String>> csvData = new List<Map<String, String>>();
         @AuraEnabled public Integer clsViolationCount = 0;
@@ -9,72 +10,108 @@ public with sharing class CSVDataController {
 
     @AuraEnabled(cacheable=true)
     public static CSVDataResponse getCSVData(String caseId) {
+
         CSVDataResponse response = new CSVDataResponse();
 
         try {
-            // Fetch the latest Attachment (CSV file) related to the case
-            List<Attachment> attachments = [
-                SELECT Id, Body, Name
-                FROM Attachment
-                WHERE ParentId = :caseId AND Name LIKE '%.csv'
+            // STEP 1 — Get File linked to Case
+            ContentDocumentLink link = [
+                SELECT ContentDocumentId
+                FROM ContentDocumentLink
+                WHERE LinkedEntityId = :caseId
+                LIMIT 1
+            ];
+
+            // STEP 2 — Get latest version
+            ContentVersion fileVersion = [
+                SELECT VersionData
+                FROM ContentVersion
+                WHERE ContentDocumentId = :link.ContentDocumentId
                 ORDER BY CreatedDate DESC
                 LIMIT 1
             ];
 
-            if (attachments.isEmpty()) {
-                System.debug('⚠️ No CSV file found for Case ID: ' + caseId);
-                return response; // Return empty response to prevent null reference error
-            }
+            // STEP 3 — Convert Blob → String safely
+            String csvContent = fileVersion.VersionData.toString();
+            csvContent = csvContent.replace('\r\n','\n').replace('\r','\n');
 
-            Attachment csvFile = attachments[0];
-
-            // Read the CSV file content
-            Blob csvBlob = csvFile.Body;
-            String csvContent = csvBlob.toString();
-
-            // Split lines
             List<String> lines = csvContent.split('\n');
+            if(lines.size() <= 1) return response;
 
-            // Ensure headers exist
-            if (lines.isEmpty()) {
-                System.debug('⚠️ CSV file is empty.');
-                return response;
+            // STEP 4 — Read headers
+            List<String> headers = parseCSVLine(lines[0]);
+
+            for(Integer i=0;i<headers.size();i++){
+                headers[i] = normalize(headers[i]);
             }
 
-            List<String> headers = lines[0].split(',');
+            // STEP 5 — Parse rows (🔥 NEW SAFE PARSER)
+            for(Integer i=1;i<lines.size();i++){
 
-            // Process CSV rows
-            for (Integer i = 1; i < lines.size(); i++) {
-                List<String> values = lines[i].split(',');
+                if(String.isBlank(lines[i])) continue;
 
-                if (values.size() == headers.size()) {
-                    Map<String, String> rowData = new Map<String, String>();
-                    for (Integer j = 0; j < headers.size(); j++) {
-                        String fieldValue = values[j].trim().replaceAll('^\"|\"$', ''); // Remove quotes
-                        rowData.put(headers[j].trim(), fieldValue);
-                    }
-                    
-                    // Count violations based on file path
-                    if (rowData.containsKey('File')) {
-                        String filePath = rowData.get('File').trim();
-                        if (filePath.contains('classes')) {
-                            response.clsViolationCount++;
-                        } else if (filePath.contains('lwc')) {
-                            response.lwcViolationCount++;
-                        } else if (filePath.contains('aura')) {
-                            response.auraViolationCount++;
-                        } else if (filePath.contains('objects')) {
-                            response.objectsViolationCount++;
-                        }
-                    }
+                List<String> values = parseCSVLine(lines[i]);
 
-                    response.csvData.add(rowData);
+                // 🔥 FIX: allow column mismatch (Code Analyzer adds new cols)
+                if(values.size() < headers.size()) continue;
+
+                Map<String,String> row = new Map<String,String>();
+
+                for(Integer j=0;j<headers.size();j++){
+                    row.put(headers[j], values[j]);
                 }
+
+                // 🔥 COUNT VIOLATIONS
+                if(row.containsKey('file')){
+                    String filePath = row.get('file').toLowerCase();
+
+                    if(filePath.contains('classes')) response.clsViolationCount++;
+                    else if(filePath.contains('lwc')) response.lwcViolationCount++;
+                    else if(filePath.contains('aura')) response.auraViolationCount++;
+                    else if(filePath.contains('objects')) response.objectsViolationCount++;
+                }
+
+                response.csvData.add(row);
             }
-        } catch (Exception e) {
-            System.debug('❌ Error processing CSV: ' + e.getMessage());
+
+        } catch(Exception e){
+            System.debug('CSV ERROR: '+e.getMessage());
         }
 
         return response;
+    }
+
+    // 🔥 Normalize headers
+    private static String normalize(String h){
+        return h.toLowerCase()
+                .replace(' ','')
+                .replace('_','')
+                .replace('"','');
+    }
+
+    // 🔥 SUPER SAFE CSV PARSER (handles quotes + commas)
+    private static List<String> parseCSVLine(String line){
+
+        List<String> cols = new List<String>();
+        Boolean inQuotes = false;
+        String cur = '';
+
+        for(Integer i=0;i<line.length();i++){
+            String c = line.substring(i,i+1);
+
+            if(c == '"'){
+                inQuotes = !inQuotes;
+            }
+            else if(c == ',' && !inQuotes){
+                cols.add(cur.trim());
+                cur = '';
+            }
+            else{
+                cur += c;
+            }
+        }
+
+        cols.add(cur.trim());
+        return cols;
     }
 }
